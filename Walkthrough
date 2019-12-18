@@ -121,9 +121,7 @@ Final size of exe-service file: 15872 bytes
 
 Note that we have to name it the same thing as the original service.
 
-So now we delete the original service: (Note, if the service is running, it's difficult to replace this binary. This means that you could have a startup script that would try to swap the binaries before the service started but otherwise, you are out of luck. Luckily for us, the service is NOT running.)
-
-Then we download the file to the victim.
+So now we replace the original service: (Note, if the service is running, it's difficult to replace this binary. This means that you could have a startup script that would try to swap the binaries before the service started but otherwise, you are out of luck. Luckily for us, the service is NOT running.)
 
 Check the service one more time:
 PS C:\Users\user\Downloads> sc.exe qc filepermsvc
