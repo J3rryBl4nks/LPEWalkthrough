@@ -1,3 +1,5 @@
+Source material and binaries for MOST of the exercises come from here: https://github.com/sagishahar/lpeworkshop
+
 Because this is a privilege escalation workshop, we are starting with a powershell reverse shell as a low privilege user. The goal for each exercise will be to get a NEW reverse shell as the NT\System user. We want to maintain our original low privilege shell so that we can have a backup shell.
 
 Once we land on the machine, we want to get a quick look at the lay of the land. I have really been liking SharpUp from Ghostpack (https://github.com/GhostPack). SharpUp and Seatbelt are fantastic resources for enumerating privesc vectors. Let's start with SharpUp.
