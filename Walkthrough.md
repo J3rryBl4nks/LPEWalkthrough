@@ -80,7 +80,7 @@ The DACL Service service is starting.
 ````
 
 
-Then we immediately get a shell as NT\Autorhity system:
+Then we immediately get a shell as NT\Authority system:
 
 ````root@kali:~/LPEWorkshop# nc -lvnp 31337
 Ncat: Version 7.80 ( https://nmap.org/ncat )
