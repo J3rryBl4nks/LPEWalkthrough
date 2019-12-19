@@ -790,6 +790,10 @@ We can eventually find that the service is starting "ipconfig.exe" on a timer.
 
 This means that if there is a PATH vulnerability we can inject our malicious ``ipconfig.exe`` into the PATH and get it executed instead of the legit binary.
 
+Now: lots of developers will just blindly call Windows executables without specifying the full path to the binary. This breaks down when some application puts their location first in the PATH variable. This can happen because developers want to have an easier time calling their own binaries, but almost always leads to privilege escalation due to other applications on the host calling windows binaries without the full path.
+
+ALWAYS USE ABSOLUTE PATHS
+
 Let's check the PATH variable from our previous scripts:
 ````
 === System Environment Variables ===
