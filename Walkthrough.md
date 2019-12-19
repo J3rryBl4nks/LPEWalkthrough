@@ -1,6 +1,12 @@
-Because this is a privilege escalation workshop, we are starting with a powershell reverse shell as a low privilege user. The goal for each exercise will be to get a NEW reverse shell as the NT\System user. We want to maintain our original low privilege shell so that we can have a backup shell.
+<h3>Privilege Escalation Workshop using LPE Workshop (https://github.com/sagishahar/lpeworkshop) and some of my own custom binaries and scripts.</h3>
 
-NOTE: Most of the time when exploiting services, we won't have rights to Start/Stop services. We would have to wait for a reboot. This workshop gives you Start/Stop rights so you don't have to reboot the machine constantly.
+Because this is a privilege escalation workshop, we are starting with a powershell reverse shell as a low privilege user. 
+
+The goal for each exercise will be to get a NEW reverse shell as the NT\System user. 
+
+We want to maintain our original low privilege shell so that we can have a backup shell.
+
+<b>NOTE: Most of the time when exploiting services, we won't have rights to Start/Stop services. We would have to wait for a reboot. This workshop gives you Start/Stop rights so you don't have to reboot the machine constantly.</b>
 
 Once we land on the machine, we want to get a quick look at the lay of the land. I have really been liking SharpUp from Ghostpack (https://github.com/GhostPack). SharpUp and Seatbelt are fantastic resources for enumerating privesc vectors. Let's start with SharpUp.
 
@@ -11,6 +17,8 @@ Using this command in my powershell reverse shell: (New-Object System.Net.WebCli
 Then we run SharpUp.exe and look at the results.
 
 The first thing we see is a Modifiable Service:
+
+````
 === Modifiable Services ===
 
   Name             : daclsvc
@@ -19,6 +27,7 @@ The first thing we see is a Modifiable Service:
   State            : Stopped
   StartMode        : Manual
   PathName         : "C:\Program Files\DACL Service\daclservice.exe"
+  ````
 
  
  This is a great place to start. This shows us that we can modify the binpath of the service. Bad access control on a service can lead to trivial privilege escalation. Any time that a standard user has rights to change the binary path (start location) of the service, they can hijack that into privilege escalation. The ability to change binary path should be restricted to Administrators only. This is usually a gross oversight on the part of the developers or the sysadmin that provisioned the box. DACL stands for Discretionary Access Control List. Windows defaults to giving everyone access to an object unless a DACL is defined: https://support.microsoft.com/en-us/help/914392/best-practices-and-guidance-for-writers-of-service-discretionary-acces
