@@ -1,5 +1,9 @@
 ## Privilege Escalation Workshop using LPE Workshop (https://github.com/sagishahar/lpeworkshop) and some of my own custom binaries and scripts. ##
 
+General notes about these privesc vectors:
+
+I have seen all of the privesc vectors that I cover in my walkthrough in real applications in the last 2 years. These are still real privesc vectors.
+
 Notes about Privesc Scripts/Tools used:
 
 I use SharpUp and Seatbelt for these exercises. I have also run PowerUp against the host and didn't find any value that PowerUp added over either of the tools I used.
