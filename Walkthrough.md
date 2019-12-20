@@ -4,6 +4,10 @@ Notes about Privesc Scripts/Tools used:
 
 I use SharpUp and Seatbelt for these exercises. I have also run PowerUp against the host and didn't find any value that PowerUp added over either of the tools I used.
 
+The one useful note for PowerUp is that you can run it in memory and a lot of Sig based AV will let you do it.
+
+https://www.harmj0y.net/blog/powershell/powerup-a-usage-guide/
+
 Because this is a privilege escalation workshop, we are starting with a powershell reverse shell as a low privilege user. 
 
 The goal for each exercise will be to get a NEW reverse shell as the NT\System user. 
