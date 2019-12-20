@@ -1,5 +1,9 @@
 ## Privilege Escalation Workshop using LPE Workshop (https://github.com/sagishahar/lpeworkshop) and some of my own custom binaries and scripts. ##
 
+Notes about Privesc Scripts/Tools used:
+
+I use SharpUp and Seatbelt for these exercises. I have also run PowerUp against the host and didn't find any value that PowerUp added over either of the tools I used.
+
 Because this is a privilege escalation workshop, we are starting with a powershell reverse shell as a low privilege user. 
 
 The goal for each exercise will be to get a NEW reverse shell as the NT\System user. 
