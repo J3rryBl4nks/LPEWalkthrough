@@ -57,6 +57,10 @@ A note about why this matters:
 
 When Windows makes a call to start a service, it calls the ServiceMain function and expects a return from this call. If you don't specify exe-service, the generated payload won't be able to give you a persistent shell.
 
+You will notice all of my shells are generated as windows/shell_reverse_tcp. These are stageless shells so they can easily be caught through netcat.
+
+More reading about staged vs stageless here: https://buffered.io/posts/staged-vs-stageless-handlers/
+
 Then we transfer over the service file using our download logic again:
 
 ````
