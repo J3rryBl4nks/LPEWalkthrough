@@ -1,5 +1,16 @@
 ## Privilege Escalation Workshop using LPE Workshop (https://github.com/sagishahar/lpeworkshop) and some of my own custom binaries and scripts. ##
 
+Notes about privesc from Administrator to NT\System:
+
+If you have an administrator account on a given Windows Desktop, you can elevate your privileges to NT\System with 100% reliability.
+
+## Method #1: ## 
+Drop your reverse shell payload and then register it as a service (see notes below about generating service payloads).
+Once it is registered as a service, start the service and you are now NT\System.
+
+## Method #2: ##
+Drop your reverse shell payload and create a scheduled task to run as system. Have that scheduled task start your revshell binary. Once the task runs, you are now NT\System.
+
 General notes about these privesc vectors:
 
 I have seen all of the privesc vectors that I cover in my walkthrough in real applications in the last 2 years. These are still real privesc vectors.
