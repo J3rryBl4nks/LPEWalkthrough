@@ -678,7 +678,17 @@ Sddl   : O:BAG:SYD:P(A;CI;KR;;;WD)(A;CI;KA;;;IU)(A;CI;KA;;;SY)(A;CI;KA;;;BA)
 
 PS C:\Users\user\Downloads> 
 ````
-Bingo! We have full control of the registry key for that service.
+whoami /groups
+
+GROUP NAME
+============
+Everyone
+BUILTIN\Users
+NT AUTHORITY\INTERACTIVE
+NT AUTHORITY\Authenticated Users
+
+Bingo! the group NT AUTHORITY\INTERACTIVE has full access and since our user is part of that group
+thus we have full control of the registry key for that service.
 
 So now we create our payload:
 ````
